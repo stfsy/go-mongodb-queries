@@ -120,6 +120,8 @@ var (
 	bsonDType      = reflect.TypeFor[bson.D]()
 	bsonAType      = reflect.TypeFor[bson.A]()
 	bsonRawType    = reflect.TypeFor[bson.Raw]()
+	bsonJSType     = reflect.TypeFor[bson.JavaScript]()
+	bsonSymbolType = reflect.TypeFor[bson.Symbol]()
 )
 
 // validateDynamicScalar performs runtime inspection for untyped/dynamic scalar entry points (such as EqAny).
@@ -130,6 +132,8 @@ func validateDynamicScalar(val any) error {
 	}
 
 	switch val.(type) {
+	case bson.JavaScript, bson.Symbol:
+		return fmt.Errorf("%w: BSON %T is not permitted as a scalar operand", ErrInvalidScalarValue, val)
 	case string, bool,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64,
@@ -165,6 +169,8 @@ func normalizeUpdateScalar(val any) (any, error) {
 	}
 
 	switch v := val.(type) {
+	case bson.JavaScript, bson.Symbol:
+		return nil, fmt.Errorf("%w: BSON %T is not permitted as a scalar operand", ErrInvalidScalarValue, val)
 	case string, bool,
 		int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64,
@@ -288,6 +294,9 @@ func normalizeUpdateScalar(val any) (any, error) {
 }
 
 func isApprovedScalarType(rt reflect.Type) bool {
+	if rt == bsonJSType || rt == bsonSymbolType {
+		return false
+	}
 	switch rt.Kind() {
 	case reflect.String, reflect.Bool,
 		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -379,6 +388,8 @@ func validateDecodedBSONDoc(doc bson.D, stripID bool) (bson.D, error) {
 
 func validateDecodedBSONValue(val any) error {
 	switch v := val.(type) {
+	case bson.JavaScript, bson.CodeWithScope, bson.Symbol:
+		return fmt.Errorf("%w: BSON %T is not permitted in struct documents", ErrInvalidScalarValue, val)
 	case bson.D:
 		_, err := validateDecodedBSONDoc(v, false)
 		return err

@@ -72,6 +72,15 @@ func OpLte[T Scalar](val T) ScalarOp[T] {
 	return ScalarOp[T]{op: "$lte", val: val}
 }
 
+func isValidScalarOp(op string) bool {
+	switch op {
+	case "$eq", "$ne", "$gt", "$gte", "$lt", "$lte":
+		return true
+	default:
+		return false
+	}
+}
+
 // Filter is an immutable, security-hardened MongoDB query AST node.
 // A zero-value Filter is invalid and returns ErrEmptyFilter on Build().
 // To intentionally match all documents in a collection, use MatchAll().
@@ -174,6 +183,9 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 		if err != nil {
 			return nil, err
 		}
+		if depth+1 > cfg.MaxDepth {
+			return nil, fmt.Errorf("%w: depth %d exceeds max %d", ErrMaxDepthExceeded, depth+1, cfg.MaxDepth)
+		}
 		return bson.D{{
 			Key: "$and",
 			Value: bson.A{
@@ -214,6 +226,11 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 		scalarOps, ok := f.val.(bson.D)
 		if !ok || len(scalarOps) == 0 {
 			return nil, fmt.Errorf("%w: field %q has no scalar operators", ErrEmptyElemMatch, f.field)
+		}
+		for _, elem := range scalarOps {
+			if !isValidScalarOp(elem.Key) {
+				return nil, fmt.Errorf("%w: invalid scalar operator %q on field %q", ErrInvalidScalarValue, elem.Key, f.field)
+			}
 		}
 		if depth+1 > cfg.MaxDepth {
 			return nil, fmt.Errorf("%w: depth %d exceeds max %d", ErrMaxDepthExceeded, depth+1, cfg.MaxDepth)
@@ -339,7 +356,7 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 			if child.err != nil {
 				return nil, child.err
 			}
-			if child.kind == kindEmpty {
+			if child.kind == kindEmpty || child.kind == kindMatchAll {
 				return nil, fmt.Errorf("%w: child %d in %s", ErrEmptyFilter, i, f.op)
 			}
 			childDoc, err := child.buildAtDepth(nextDepth, cfg)
@@ -357,6 +374,9 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 		err := ValidateField(f.field)
 		if err != nil {
 			return nil, err
+		}
+		if !isValidScalarOp(f.op) {
+			return nil, fmt.Errorf("%w: invalid scalar operator %q on field %q", ErrInvalidScalarValue, f.op, f.field)
 		}
 		if depth+1 > cfg.MaxDepth {
 			return nil, fmt.Errorf("%w: depth %d exceeds max %d", ErrMaxDepthExceeded, depth+1, cfg.MaxDepth)

@@ -1232,3 +1232,88 @@ func TestConcurrencyAndImmutability(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestSecurityAuditRegressions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("MatchAll rejected inside logical combinators, ElemMatch, and PullFilter", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := And(MatchAll()).Build()
+		require.ErrorIs(t, err, ErrEmptyFilter)
+
+		_, err = Or(Eq("tenant_id", "t1"), MatchAll()).Build()
+		require.ErrorIs(t, err, ErrEmptyFilter)
+
+		_, err = Nor(MatchAll()).Build()
+		require.ErrorIs(t, err, ErrEmptyFilter)
+
+		_, err = ElemMatch("seats", Or(Eq("active", true), MatchAll())).Build()
+		require.ErrorIs(t, err, ErrEmptyFilter)
+
+		_, err = NewUpdate().PullFilter("seats", Or(Eq("active", true), MatchAll())).Build()
+		require.ErrorIs(t, err, ErrEmptyFilter)
+	})
+
+	t.Run("zero-value ScalarOp rejected in Not and ScalarElemMatch", func(t *testing.T) {
+		t.Parallel()
+
+		var zeroOp ScalarOp[string]
+		_, err := Not("status", zeroOp).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = ScalarElemMatch("tags", zeroOp).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+	})
+
+	t.Run("ExistsNotNull enforces MaxDepth", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := And(ExistsNotNull("activated_at")).BuildWithOptions(Options{MaxDepth: 1})
+		require.ErrorIs(t, err, ErrMaxDepthExceeded)
+
+		doc, err := And(ExistsNotNull("activated_at")).BuildWithOptions(Options{MaxDepth: 2})
+		require.NoError(t, err)
+		assert.NotEmpty(t, doc)
+	})
+
+	t.Run("BSON JavaScript, Symbol, and CodeWithScope rejected in scalars and structs", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := EqAny("fn", bson.JavaScript("return true;")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = EqAny("sym", bson.Symbol("sym")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = NewUpdate().Set("fn", bson.JavaScript("return true;")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		jsVal := bson.JavaScript("return true;")
+		_, err = NewUpdate().Set("fn", &jsVal).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = NewUpdate().Set("sym", bson.Symbol("sym")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = NewUpdate().SetSlice("fns", []bson.JavaScript{"return 1;"}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		type codeDoc struct {
+			Fn bson.CodeWithScope `bson:"fn"`
+		}
+		_, err = NewUpdate().SetStruct("payload", codeDoc{
+			Fn: bson.CodeWithScope{
+				Code:  "return true;",
+				Scope: bson.D{{Key: "$where", Value: "1"}},
+			},
+		}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		type jsDoc struct {
+			Fn bson.JavaScript `bson:"fn"`
+		}
+		_, err = NewUpdate().SetDocumentStruct(jsDoc{Fn: "return 1;"}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+	})
+}

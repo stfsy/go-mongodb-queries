@@ -147,6 +147,10 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 		if err != nil {
 			return nil, err
 		}
+		err = validateScalarTypeIfNonNil(f.val)
+		if err != nil {
+			return nil, err
+		}
 		return bson.D{{
 			Key:   f.field,
 			Value: bson.D{{Key: f.op, Value: f.val}},
@@ -156,6 +160,10 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 		err := ValidateField(f.field)
 		if err != nil {
 			return nil, err
+		}
+		switch f.val.(type) {
+		case []bson.JavaScript, []bson.Symbol:
+			return nil, fmt.Errorf("%w: BSON %T is not permitted as a slice operand", ErrInvalidScalarValue, f.val)
 		}
 		if f.num == 0 {
 			return nil, fmt.Errorf("%w: %s on field %q", ErrEmptySlice, f.op, f.field)
@@ -230,6 +238,10 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 		for _, elem := range scalarOps {
 			if !isValidScalarOp(elem.Key) {
 				return nil, fmt.Errorf("%w: invalid scalar operator %q on field %q", ErrInvalidScalarValue, elem.Key, f.field)
+			}
+			err = validateScalarTypeIfNonNil(elem.Value)
+			if err != nil {
+				return nil, err
 			}
 		}
 		if depth+1 > cfg.MaxDepth {
@@ -377,6 +389,10 @@ func (f *Filter) buildAtDepth(depth int, cfg Options) (bson.D, error) {
 		}
 		if !isValidScalarOp(f.op) {
 			return nil, fmt.Errorf("%w: invalid scalar operator %q on field %q", ErrInvalidScalarValue, f.op, f.field)
+		}
+		err = validateScalarTypeIfNonNil(f.val)
+		if err != nil {
+			return nil, err
 		}
 		if depth+1 > cfg.MaxDepth {
 			return nil, fmt.Errorf("%w: depth %d exceeds max %d", ErrMaxDepthExceeded, depth+1, cfg.MaxDepth)

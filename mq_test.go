@@ -1316,4 +1316,75 @@ func TestSecurityAuditRegressions(t *testing.T) {
 		_, err = NewUpdate().SetDocumentStruct(jsDoc{Fn: "return 1;"}).Build()
 		require.ErrorIs(t, err, ErrInvalidScalarValue)
 	})
+
+	t.Run("generic Scalar entry points reject bson.JavaScript and bson.Symbol", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Eq("fn", bson.JavaScript("return 1;")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = Ne("sym", bson.Symbol("sym")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = In("fn", []bson.JavaScript{"return 1;"}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = Nin("sym", []bson.Symbol{"sym"}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = Not("fn", OpEq(bson.JavaScript("return 1;"))).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = ScalarElemMatch("fns", OpEq(bson.JavaScript("return 1;"))).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = Set("fn", bson.JavaScript("return 1;")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = Push("fns", bson.Symbol("sym")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = Pull("fns", bson.JavaScript("return 1;")).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+	})
+
+	t.Run("unsafe BSON types rejected in structs and slices", func(t *testing.T) {
+		t.Parallel()
+
+		type regexDoc struct {
+			R bson.Regex `bson:"r"`
+		}
+		_, err := NewUpdate().SetStruct("payload", regexDoc{R: bson.Regex{Pattern: ".*", Options: "i"}}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		type sentinelDoc struct {
+			Min bson.MinKey `bson:"min"`
+		}
+		_, err = NewUpdate().SetStruct("payload", sentinelDoc{}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		type maxDoc struct {
+			Max bson.MaxKey `bson:"max"`
+		}
+		_, err = NewUpdate().SetStruct("payload", maxDoc{}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		type undefDoc struct {
+			U bson.Undefined `bson:"u"`
+		}
+		_, err = NewUpdate().SetStruct("payload", undefDoc{}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		type dbPtrDoc struct {
+			P bson.DBPointer `bson:"p"`
+		}
+		_, err = NewUpdate().SetStruct("payload", dbPtrDoc{P: bson.DBPointer{DB: "db", Pointer: bson.NewObjectID()}}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = NewUpdate().SetSlice("raw_arr", bson.RawArray{0x05, 0x00, 0x00, 0x00, 0x00}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+
+		_, err = NewUpdate().SetSlice("raw_elem", bson.RawElement{0x00}).Build()
+		require.ErrorIs(t, err, ErrInvalidScalarValue)
+	})
 }

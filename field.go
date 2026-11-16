@@ -117,11 +117,13 @@ var (
 	timestampType  = reflect.TypeFor[bson.Timestamp]()
 	bsonEType      = reflect.TypeFor[bson.E]()
 	bsonRawValType = reflect.TypeFor[bson.RawValue]()
-	bsonDType      = reflect.TypeFor[bson.D]()
-	bsonAType      = reflect.TypeFor[bson.A]()
-	bsonRawType    = reflect.TypeFor[bson.Raw]()
-	bsonJSType     = reflect.TypeFor[bson.JavaScript]()
-	bsonSymbolType = reflect.TypeFor[bson.Symbol]()
+	bsonDType          = reflect.TypeFor[bson.D]()
+	bsonAType          = reflect.TypeFor[bson.A]()
+	bsonRawType        = reflect.TypeFor[bson.Raw]()
+	bsonRawArrayType   = reflect.TypeFor[bson.RawArray]()
+	bsonRawElementType = reflect.TypeFor[bson.RawElement]()
+	bsonJSType         = reflect.TypeFor[bson.JavaScript]()
+	bsonSymbolType     = reflect.TypeFor[bson.Symbol]()
 )
 
 // validateDynamicScalar performs runtime inspection for untyped/dynamic scalar entry points (such as EqAny).
@@ -363,6 +365,18 @@ func marshalStructToSafeDoc(v any, stripID bool) (bson.D, error) {
 	return cleaned, nil
 }
 
+func validateScalarTypeIfNonNil(val any) error {
+	if val == nil {
+		return nil
+	}
+	switch val.(type) {
+	case bson.JavaScript, bson.Symbol:
+		return fmt.Errorf("%w: BSON %T is not permitted as a scalar operand", ErrInvalidScalarValue, val)
+	default:
+		return nil
+	}
+}
+
 func validateDecodedBSONDoc(doc bson.D, stripID bool) (bson.D, error) {
 	w := 0
 	for i := range doc {
@@ -388,7 +402,8 @@ func validateDecodedBSONDoc(doc bson.D, stripID bool) (bson.D, error) {
 
 func validateDecodedBSONValue(val any) error {
 	switch v := val.(type) {
-	case bson.JavaScript, bson.CodeWithScope, bson.Symbol:
+	case bson.JavaScript, bson.CodeWithScope, bson.Symbol,
+		bson.Regex, bson.MinKey, bson.MaxKey, bson.Undefined, bson.DBPointer:
 		return fmt.Errorf("%w: BSON %T is not permitted in struct documents", ErrInvalidScalarValue, val)
 	case bson.D:
 		_, err := validateDecodedBSONDoc(v, false)

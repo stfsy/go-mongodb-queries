@@ -164,7 +164,9 @@ func (u *Update) SetSlice(field string, slice any) *Update {
 
 	rv := reflect.ValueOf(slice)
 	rt := rv.Type()
-	if rt.Kind() != reflect.Slice || rt == bsonDType || rt == bsonAType || rt == bsonRawType {
+	if rt.Kind() != reflect.Slice ||
+		rt == bsonDType || rt == bsonAType || rt == bsonRawType ||
+		rt == bsonRawArrayType || rt == bsonRawElementType {
 		u.err = fmt.Errorf("field %q: %w: expected typed Go slice, got %s", field, ErrInvalidScalarValue, rt.String())
 		return u
 	}
@@ -452,6 +454,10 @@ func (u *Update) BuildWithOptions(opts Options) (bson.D, error) {
 
 // Set creates a new Update builder initialized with {$set: {field: val}}.
 func Set[T Scalar](field string, val T) *Update {
+	err := validateScalarTypeIfNonNil(val)
+	if err != nil {
+		return &Update{err: fmt.Errorf("field %q: %w", field, err)}
+	}
 	return NewUpdate().appendOp("$set", field, val)
 }
 
@@ -467,11 +473,19 @@ func Inc[T Numeric](field string, delta T) *Update {
 
 // Push creates a new Update builder initialized with {$push: {field: val}}.
 func Push[T Scalar](field string, val T) *Update {
+	err := validateScalarTypeIfNonNil(val)
+	if err != nil {
+		return &Update{err: fmt.Errorf("field %q: %w", field, err)}
+	}
 	return NewUpdate().appendOp("$push", field, val)
 }
 
 // Pull creates a new Update builder initialized with {$pull: {field: {$eq: val}}}.
 func Pull[T Scalar](field string, val T) *Update {
+	err := validateScalarTypeIfNonNil(val)
+	if err != nil {
+		return &Update{err: fmt.Errorf("field %q: %w", field, err)}
+	}
 	return NewUpdate().appendOp("$pull", field, bson.D{{Key: "$eq", Value: val}})
 }
 

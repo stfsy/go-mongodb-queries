@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/stfsy/go-mongodb-queries/compare/v1.0.0...v1.0.1) (2026-11-23)
+
+
+### Miscellaneous Chores
+
+* **deps:** Bump go.mongodb.org/mongo-driver/v2 ([29ed1c4](https://github.com/stfsy/go-mongodb-queries/commit/29ed1c4edf6aee89ed01431d5755b3684bd5999f))
+* **deps:** Bump go.mongodb.org/mongo-driver/v2 from 2.10.0 to 2.10.1 in the gomod group ([1b6ea3b](https://github.com/stfsy/go-mongodb-queries/commit/1b6ea3b2efe602fe23705dd0c160e807b875fa03))
+
 ## [1.0.0](https://github.com/stfsy/go-mongodb-queries/compare/v0.1.0...v1.0.0) (2026-11-16)
 
 
